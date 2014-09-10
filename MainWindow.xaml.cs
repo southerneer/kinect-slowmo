@@ -59,7 +59,7 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             FrameDescription colorFrameDescription = this.kinectSensor.ColorFrameSource.CreateFrameDescription(ColorImageFormat.Bgra);
 
             // create the bitmap to display
-            this.colorBitmap = new WriteableBitmap(colorFrameDescription.Width, colorFrameDescription.Height, 96.0, 96.0, PixelFormats.Bgr32, null);
+            this.colorBitmap = new WriteableBitmap(colorFrameDescription.Width, colorFrameDescription.Height, 48.0, 48.0, PixelFormats.Bgr32, null);
 
             // set IsAvailableChanged event notifier
             this.kinectSensor.IsAvailableChanged += this.Sensor_IsAvailableChanged;
@@ -204,10 +204,13 @@ namespace Microsoft.Samples.Kinect.ColorBasics
         //private List<Array<byte>> frameList
 
         private int counter = 0;
-        private int slowFactor = 2;
-        private int frameIndex = 0;
-        private int maxFrames = 100;
-        private List<byte[]> frameList = new List<byte[]>();
+        private double slowFactor = 0.5; // lower = slower
+        private double nextFrameIndexToDoAShow = 0;
+
+        private int maxFrames = 200;  // run out of memory at around 184 frames right now...which means each frame is 10.8MB (!)
+
+        private Queue<byte[]> storedFrames = new Queue<byte[]>(1000);
+
         /// Size for the RGB pixel in bitmap. I don't understand how this is calculated
         private readonly int _bytePerPixel = (PixelFormats.Bgr32.BitsPerPixel + 7) / 8;
         
@@ -228,16 +231,25 @@ namespace Microsoft.Samples.Kinect.ColorBasics
                 else colorFrame.CopyConvertedFrameDataToArray(bytes, ColorImageFormat.Bgra);
 
                 // store off the frame into a buffer
-                if(frameList.Count < maxFrames)
-                    frameList.Add(bytes);
+                if (storedFrames.Count > maxFrames)
+                {
+                    storedFrames.Clear();
+                    counter = 0;
+                    nextFrameIndexToDoAShow = 0;
+                }
+                    
+
+                storedFrames.Enqueue(bytes);
             }
 
             // short circuit and don't change the writeable bitmap
-            if (counter != slowFactor)
+            if (counter++ != Math.Round(nextFrameIndexToDoAShow) )
             {
-                counter++;
                 return;
             }
+
+            Debug.WriteLine("counter = " + counter + " and nfitdas = " + nextFrameIndexToDoAShow);
+            Debug.WriteLine("FrameList count = " + storedFrames.Count);
 
             // this.colorBitmap is a WriteableBitmap on my WPF window
             this.colorBitmap.Lock();
@@ -248,116 +260,16 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             // TODO: need to convert to BGRA format (otherwise it will try YUY2)
             this.colorBitmap.WritePixels(
                 frameRect,
-                frameList[frameIndex], // this is the byte array I stored away above
+                storedFrames.Dequeue(), // this is the byte array I stored away above
                 this.colorBitmap.BackBufferStride,
                 0);
-
-            frameIndex++;
 
             // specify that the bitmap has changed
             this.colorBitmap.AddDirtyRect(frameRect);
 
             this.colorBitmap.Unlock();
 
-            counter = 0;
-        }
-
-        private void MyWriteMethod(ColorFrame colorFrame)
-        {
-            FrameDescription colorFrameDescription = colorFrame.FrameDescription;
-
-            using (KinectBuffer colorBuffer = colorFrame.LockRawImageBuffer())
-            {
-                
-
-                //IntPtr ptr = new IntPtr();
-                //colorFrame.CopyConvertedFrameDataToIntPtr(
-                //        ptr,
-                //        (uint)(colorFrameDescription.Width * colorFrameDescription.Height * 4),
-                //        ColorImageFormat.Bgra);
-
-                //// store off the frame into a buffer
-                //frameList.Add(ptr);
-
-
-                // *** Store the color frame as a byte array
-                byte[] bytes = new byte[colorFrameDescription.LengthInPixels * colorFrameDescription.BytesPerPixel];
-                colorFrame.CopyRawFrameDataToArray(bytes);
-
-                //// *** Store the color frame as a formatted byte array
-                //byte[] bytes = new byte[colorFrameDescription.LengthInPixels * colorFrameDescription.BytesPerPixel];
-                //colorFrame.CopyRawFrameDataToArray(bytes);
-
-                // store off the frame into a buffer
-                frameList.Add(bytes);
-
-                if (counter == slowFactor)
-                {
-                    //Debug.WriteLine("writing to output");
-                    this.colorBitmap.Lock();
-
-                    // verify data and write the new color frame data to the display bitmap
-                    if ((colorFrameDescription.Width == this.colorBitmap.PixelWidth) && (colorFrameDescription.Height == this.colorBitmap.PixelHeight))
-                    {
-                        //Debug.WriteLine("Writing to bitmap");
-
-                        //// write the input colorframe (from the camera) to the output colorframe
-                        //colorFrame.CopyConvertedFrameDataToIntPtr(
-                        //    this.colorBitmap.BackBuffer,
-                        //    (uint)(colorFrameDescription.Width * colorFrameDescription.Height * 4),
-                        //    ColorImageFormat.Bgra);
-
-                        //this.colorBitmap.back
-
-                        // TODO: write the next byte array in our "buffer" to the output bitmap
-                        this.colorBitmap.WritePixels(
-                            new Int32Rect(0, 0, colorFrameDescription.Width, colorFrameDescription.Height),
-                            frameList[frameIndex],
-                            this.colorBitmap.BackBufferStride,
-                            0 );
-
-                        Debug.WriteLine("Wrote frame " + frameIndex);
-
-                        frameIndex++;
-
-                        // specify that the bitmap has changed
-                        this.colorBitmap.AddDirtyRect(new Int32Rect(0, 0, this.colorBitmap.PixelWidth, this.colorBitmap.PixelHeight));
-                    }
-
-                    this.colorBitmap.Unlock();
-
-                    counter = 0;
-                }
-                else
-                {
-                    //Debug.WriteLine("Incrementing counter");
-                    counter++;
-                    //Debug.WriteLine("Counter is " + counter);
-                }
-            }
-        }
-
-        private void OriginalWriteMethod(ColorFrame colorFrame)
-        {
-            FrameDescription colorFrameDescription = colorFrame.FrameDescription;
-
-            using (KinectBuffer colorBuffer = colorFrame.LockRawImageBuffer())
-            {
-                this.colorBitmap.Lock();
-
-                // verify data and write the new color frame data to the display bitmap
-                if ((colorFrameDescription.Width == this.colorBitmap.PixelWidth) && (colorFrameDescription.Height == this.colorBitmap.PixelHeight))
-                {
-                    colorFrame.CopyConvertedFrameDataToIntPtr(
-                        this.colorBitmap.BackBuffer,
-                        (uint)(colorFrameDescription.Width * colorFrameDescription.Height * 4),
-                        ColorImageFormat.Bgra);
-
-                    this.colorBitmap.AddDirtyRect(new Int32Rect(0, 0, this.colorBitmap.PixelWidth, this.colorBitmap.PixelHeight));
-                }
-
-                this.colorBitmap.Unlock();
-            }
+            nextFrameIndexToDoAShow = nextFrameIndexToDoAShow + (1 / slowFactor);
         }
 
         /// <summary>
