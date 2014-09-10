@@ -59,7 +59,7 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             FrameDescription colorFrameDescription = this.kinectSensor.ColorFrameSource.CreateFrameDescription(ColorImageFormat.Bgra);
 
             // create the bitmap to display
-            this.colorBitmap = new WriteableBitmap(colorFrameDescription.Width, colorFrameDescription.Height, 48.0, 48.0, PixelFormats.Bgr32, null);
+            this.colorBitmap = new WriteableBitmap(colorFrameDescription.Width, colorFrameDescription.Height, 96.0, 96.0, PixelFormats.Bgr32, null);
 
             // set IsAvailableChanged event notifier
             this.kinectSensor.IsAvailableChanged += this.Sensor_IsAvailableChanged;
@@ -190,10 +190,6 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             {
                 if (colorFrame != null)
                 {
-                    //OriginalWriteMethod(colorFrame);
-
-                    //MyWriteMethod(colorFrame);
-
                     SlowMotion(colorFrame);
                 }
             }
