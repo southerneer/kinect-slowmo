@@ -23,9 +23,6 @@ namespace Microsoft.Samples.Kinect.ColorBasics
     /// </summary>
     public partial class MainWindow : Window, INotifyPropertyChanged
     {
-        /// <summary>
-        /// Active Kinect sensor
-        /// </summary>
         private KinectSensor kinectSensor = null;
 
         /// <summary>
@@ -54,8 +51,14 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             // open the reader for the color frames
             this.colorFrameReader = this.kinectSensor.ColorFrameSource.OpenReader();
 
+            // open the reader for the body frames
+            this.bodyFrameReader = this.kinectSensor.BodyFrameSource.OpenReader();
+
             // wire handler for frame arrival
             this.colorFrameReader.FrameArrived += this.Reader_ColorFrameArrived;
+
+            // wire handler for skeleton data
+            this.bodyFrameReader.FrameArrived += this.BodyReader_FrameArrived;
 
             // create the colorFrameDescription from the ColorFrameSource using Bgra format
             FrameDescription colorFrameDescription = this.kinectSensor.ColorFrameSource.CreateFrameDescription(ColorImageFormat.Bgra);
@@ -200,10 +203,14 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             }
         }
 
-        private int counter = 0;
-        private int delay = 3; // number of seconds to show in real time before beginning slowdown
-        private double slowFactor = 0.5; // lower = slower
+        
+        private int delay = 1; // number of seconds to show in real time before beginning slowdown
+        private double easing = 0.1;  // amount to start slowing every second after the initial delay
+        private double minSlowFactor = 0.5; // the slowest the slowmo goes. lower = slower
 
+        private double slowFactor = 1;
+        private double slowCount = 0;
+        private int counter = 0;
         private double nextFrameIndexToDoAShow = 0;
         private int maxFrames = 20000;  // run out of memory at around 184 frames right now...which means each frame is 10.8MB (!)
 
@@ -215,9 +222,21 @@ namespace Microsoft.Samples.Kinect.ColorBasics
         
         private void SlowMotion(Microsoft.Kinect.ColorFrame colorFrame)
         {
-            StoreFrame(colorFrame);
+            if (skeletonAcquired)
+            {
+                StoreFrame(colorFrame);
 
-            WriteFrame();
+                WriteFrame();
+            }
+            else
+            {
+                storedFrames.Clear();
+                slowFactor = 1;
+                slowCount = 0;
+                counter = 0;
+                nextFrameIndexToDoAShow = 0;
+                this.colorBitmap.Clear(System.Windows.Media.Color.FromRgb(0, 0, 0));
+            }
         }
 
         private void WriteFrame()
@@ -234,13 +253,30 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             // this.colorBitmap is a WriteableBitmap on my WPF window
             this.colorBitmap.Lock();
 
+            // write to the bitmap from the stored byte array in the queue
             this.colorBitmap.FromByteArray(storedFrames.Dequeue());
-
-            //this.colorBitmap.from
 
             this.colorBitmap.Unlock();
 
-            nextFrameIndexToDoAShow = nextFrameIndexToDoAShow + (1 / slowFactor);
+            // at 30 fps the delay is 30*seconds
+            if (counter < (30 * delay))
+            {
+                nextFrameIndexToDoAShow++;
+            }
+            else
+            {
+                if (slowCount==30 && slowFactor > minSlowFactor)
+                {
+                    slowFactor = (slowFactor - easing) < minSlowFactor ? minSlowFactor : (slowFactor - easing);
+                    slowCount = 0;
+                }
+                else
+                {
+                    slowCount++;
+                }
+
+                nextFrameIndexToDoAShow = nextFrameIndexToDoAShow + (1 / slowFactor);
+            }
         }
 
         private void StoreFrame(ColorFrame colorFrame)
@@ -309,9 +345,6 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             }
         }
 
-
-
-
         /// <summary>
         /// Handles the event which the sensor becomes unavailable (E.g. paused, closed, unplugged).
         /// </summary>
@@ -323,5 +356,79 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             this.StatusText = this.kinectSensor.IsAvailable ? Properties.Resources.RunningStatusText
                                                             : Properties.Resources.SensorNotAvailableStatusText;
         }
+
+
+        #region Skeleton Tracking
+
+            /// <summary>
+            /// Reader for body frames
+            /// </summary>
+            private BodyFrameReader bodyFrameReader = null;
+
+            /// <summary>
+            /// Array for the bodies
+            /// </summary>
+            private Body[] bodies = null;
+
+            private bool skeletonAcquired = false;
+            private int missThreshold = 20;
+            private int missedCount = 0; // once we've missed 'missedThreshold' consecutive frames we turn off skeletonAcquired
+
+            private int framesAfterSkeleton = 300; 
+            private int skeletonBuffer = 0; // once skeleton is gone, wait this many more frames before resetting
+
+            private void BodyReader_FrameArrived(object sender, BodyFrameArrivedEventArgs e)
+            {
+                bool dataReceived = false;
+
+                Debug.WriteLine("Missed Count = " + missedCount);
+
+                using (BodyFrame bodyFrame = e.FrameReference.AcquireFrame())
+                {
+                    if (bodyFrame != null)
+                    {
+                        if (this.bodies == null)
+                        {
+                            this.bodies = new Body[bodyFrame.BodyCount];
+                        }
+
+                        // The first time GetAndRefreshBodyData is called, Kinect will allocate each Body in the array.
+                        // As long as those body objects are not disposed and not set to null in the array,
+                        // those body objects will be re-used.
+                        bodyFrame.GetAndRefreshBodyData(this.bodies);
+                        dataReceived = true;
+                    }
+                }
+
+                if (dataReceived)
+                {
+                    foreach (Body body in this.bodies)
+                    {
+                        if (body.IsTracked)
+                        {
+                            //Debug.WriteLine("We Have Skeleton!");
+                            skeletonAcquired = true;
+                            missedCount = 0;
+                            skeletonBuffer = 0;
+                            return;
+                        }
+                    }
+                }
+
+                if( missedCount < missThreshold )
+                {
+                    missedCount++;
+                    return;
+                } else if(skeletonBuffer < framesAfterSkeleton) {
+                    skeletonBuffer++;
+                    Debug.WriteLine("skeletonbuffer is " + skeletonBuffer);
+                    return;
+                }
+
+                Debug.WriteLine("No skeleton tracked");
+                skeletonAcquired = false;
+            }
+
+        #endregion
     }
 }
