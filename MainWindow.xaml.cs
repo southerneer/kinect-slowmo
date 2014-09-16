@@ -15,6 +15,8 @@ namespace Microsoft.Samples.Kinect.ColorBasics
     using System.Windows.Media.Imaging;
     using Microsoft.Kinect;
     using System.Collections.Generic;
+    using System.Drawing;
+    using System.Drawing.Imaging;
 
     /// <summary>
     /// Interaction logic for MainWindow
@@ -59,7 +61,10 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             FrameDescription colorFrameDescription = this.kinectSensor.ColorFrameSource.CreateFrameDescription(ColorImageFormat.Bgra);
 
             // create the bitmap to display
-            this.colorBitmap = new WriteableBitmap(colorFrameDescription.Width, colorFrameDescription.Height, 96.0, 96.0, PixelFormats.Bgr32, null);
+            //this.colorBitmap = new WriteableBitmap(colorFrameDescription.Width, colorFrameDescription.Height, 96.0, 96.0, PixelFormats.Bgr32, null);
+
+            //WriteableBitmapExtensions.
+            this.colorBitmap = BitmapFactory.New(colorFrameDescription.Width, colorFrameDescription.Height);
 
             // set IsAvailableChanged event notifier
             this.kinectSensor.IsAvailableChanged += this.Sensor_IsAvailableChanged;
@@ -195,15 +200,13 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             }
         }
 
-        //private List<ColorFrame> frameList = new List<ColorFrame>();
-        //private List<IntPtr> frameList = new List<IntPtr>();
-        //private List<Array<byte>> frameList
-
         private int counter = 0;
+        private int delay = 3; // number of seconds to show in real time before beginning slowdown
         private double slowFactor = 0.5; // lower = slower
-        private double nextFrameIndexToDoAShow = 0;
 
-        private int maxFrames = 200;  // run out of memory at around 184 frames right now...which means each frame is 10.8MB (!)
+        private double nextFrameIndexToDoAShow = 0;
+        private int maxFrames = 20000;  // run out of memory at around 184 frames right now...which means each frame is 10.8MB (!)
+
 
         private Queue<byte[]> storedFrames = new Queue<byte[]>(1000);
 
@@ -212,61 +215,102 @@ namespace Microsoft.Samples.Kinect.ColorBasics
         
         private void SlowMotion(Microsoft.Kinect.ColorFrame colorFrame)
         {
+            StoreFrame(colorFrame);
+
+            WriteFrame();
+        }
+
+        private void WriteFrame()
+        {
+            // short circuit and don't change the writeable bitmap
+            if (counter++ != Math.Round(nextFrameIndexToDoAShow))
+            {
+                return;
+            }
+
+            //Debug.WriteLine("counter = " + counter + " and nfitdas = " + nextFrameIndexToDoAShow);
+            //Debug.WriteLine("FrameList count = " + storedFrames.Count);
+
+            // this.colorBitmap is a WriteableBitmap on my WPF window
+            this.colorBitmap.Lock();
+
+            this.colorBitmap.FromByteArray(storedFrames.Dequeue());
+
+            //this.colorBitmap.from
+
+            this.colorBitmap.Unlock();
+
+            nextFrameIndexToDoAShow = nextFrameIndexToDoAShow + (1 / slowFactor);
+        }
+
+        private void StoreFrame(ColorFrame colorFrame)
+        {
             FrameDescription colorFrameDescription = colorFrame.FrameDescription;
 
             using (colorFrame.LockRawImageBuffer())
             {
                 // Store the color frame data as a byte array
-                //byte[] bytes = new byte[colorFrameDescription.LengthInPixels * colorFrameDescription.BytesPerPixel];
                 byte[] bytes = new byte[colorFrameDescription.Width * colorFrameDescription.Height * _bytePerPixel];
 
-                if (colorFrame.RawColorImageFormat == ColorImageFormat.Bgra)
-                {
-                    colorFrame.CopyRawFrameDataToArray(bytes);
-                }
-                else colorFrame.CopyConvertedFrameDataToArray(bytes, ColorImageFormat.Bgra);
+                // the incoming image data is in yuy2
+                colorFrame.CopyConvertedFrameDataToArray(bytes, ColorImageFormat.Bgra);
 
-                // store off the frame into a buffer
                 if (storedFrames.Count > maxFrames)
                 {
                     storedFrames.Clear();
                     counter = 0;
                     nextFrameIndexToDoAShow = 0;
                 }
-                    
 
+                // store off the frame into a queue
                 storedFrames.Enqueue(bytes);
             }
-
-            // short circuit and don't change the writeable bitmap
-            if (counter++ != Math.Round(nextFrameIndexToDoAShow) )
-            {
-                return;
-            }
-
-            Debug.WriteLine("counter = " + counter + " and nfitdas = " + nextFrameIndexToDoAShow);
-            Debug.WriteLine("FrameList count = " + storedFrames.Count);
-
-            // this.colorBitmap is a WriteableBitmap on my WPF window
-            this.colorBitmap.Lock();
-
-            Int32Rect frameRect = new Int32Rect(0, 0, colorFrameDescription.Width, colorFrameDescription.Height);
-
-            // write the next byte array in our "buffer" to the output bitmap (?)
-            // TODO: need to convert to BGRA format (otherwise it will try YUY2)
-            this.colorBitmap.WritePixels(
-                frameRect,
-                storedFrames.Dequeue(), // this is the byte array I stored away above
-                this.colorBitmap.BackBufferStride,
-                0);
-
-            // specify that the bitmap has changed
-            this.colorBitmap.AddDirtyRect(frameRect);
-
-            this.colorBitmap.Unlock();
-
-            nextFrameIndexToDoAShow = nextFrameIndexToDoAShow + (1 / slowFactor);
         }
+
+        private void StoreFrameCompressed(ColorFrame colorFrame)
+        {
+            FrameDescription colorFrameDescription = colorFrame.FrameDescription;
+
+            using (colorFrame.LockRawImageBuffer())
+            {
+                BitmapEncoder encoder = new PngBitmapEncoder();
+
+                // Store the color frame data as a byte array
+                byte[] bytes = new byte[colorFrameDescription.Width * colorFrameDescription.Height * _bytePerPixel];
+
+                // the incoming image data is in yuy2
+                colorFrame.CopyConvertedFrameDataToArray(bytes, ColorImageFormat.Bgra);
+
+                using (MemoryStream stream = new MemoryStream(bytes))
+                {
+                    //***********************************************
+                    //TODO: figure out how we can get from the colorframe to something the pngencoder can digest
+                    //***********************************************
+
+                    BitmapFrame bmframe = BitmapFrame.Create(stream);
+
+                    // populate the encoder with data from the colorFrame
+                    encoder.Frames.Add(bmframe);
+                }
+
+                // store the compressed byte stream in the queue
+                using (MemoryStream stream = new MemoryStream())
+                {
+                    encoder.Save(stream);
+                    storedFrames.Enqueue(stream.ToArray());
+                }
+
+                if (storedFrames.Count > maxFrames)
+                {
+                    storedFrames.Clear();
+                    counter = 0;
+                    nextFrameIndexToDoAShow = 0;
+                }
+            }
+        }
+
+
+
 
         /// <summary>
         /// Handles the event which the sensor becomes unavailable (E.g. paused, closed, unplugged).
