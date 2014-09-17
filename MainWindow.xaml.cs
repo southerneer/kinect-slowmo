@@ -58,16 +58,18 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             this.colorFrameReader.FrameArrived += this.Reader_ColorFrameArrived;
 
             // wire handler for skeleton data
-            this.bodyFrameReader.FrameArrived += this.BodyReader_FrameArrived;
+            if (skeletonActivate )
+                this.bodyFrameReader.FrameArrived += this.BodyReader_FrameArrived;
 
             // create the colorFrameDescription from the ColorFrameSource using Bgra format
             FrameDescription colorFrameDescription = this.kinectSensor.ColorFrameSource.CreateFrameDescription(ColorImageFormat.Bgra);
 
             // create the bitmap to display
             //this.colorBitmap = new WriteableBitmap(colorFrameDescription.Width, colorFrameDescription.Height, 96.0, 96.0, PixelFormats.Bgr32, null);
-
-            //WriteableBitmapExtensions.
             this.colorBitmap = BitmapFactory.New(colorFrameDescription.Width, colorFrameDescription.Height);
+
+            // we only need this if we're doing the compressed version
+            //this.tempBitmap = BitmapFactory.New(colorFrameDescription.Width, colorFrameDescription.Height);
 
             // set IsAvailableChanged event notifier
             this.kinectSensor.IsAvailableChanged += this.Sensor_IsAvailableChanged;
@@ -207,6 +209,7 @@ namespace Microsoft.Samples.Kinect.ColorBasics
         private int delay = 1; // number of seconds to show in real time before beginning slowdown
         private double easing = 0.1;  // amount to start slowing every second after the initial delay
         private double minSlowFactor = 0.5; // the slowest the slowmo goes. lower = slower
+        double maxFastFactor = 2;
 
         private double slowFactor = 1;
         private double slowCount = 0;
@@ -214,23 +217,29 @@ namespace Microsoft.Samples.Kinect.ColorBasics
         private double nextFrameIndexToDoAShow = 0;
         private int maxFrames = 20000;  // run out of memory at around 184 frames right now...which means each frame is 10.8MB (!)
 
-
-        private Queue<byte[]> storedFrames = new Queue<byte[]>(1000);
+        private Queue<byte[]> storedFrames = new Queue<byte[]>();
 
         /// Size for the RGB pixel in bitmap. I don't understand how this is calculated
         private readonly int _bytePerPixel = (PixelFormats.Bgr32.BitsPerPixel + 7) / 8;
-        
+
+        bool skeletonActivate = false; // switch for activating slowmo on skeleton
+
         private void SlowMotion(Microsoft.Kinect.ColorFrame colorFrame)
         {
-            if (skeletonAcquired)
+            if (!skeletonActivate || skeletonAcquired )
             {
-                StoreFrame(colorFrame);
-
-                WriteFrame();
+                StoreFrameToQueue(colorFrame);
+                WriteFrameFromQueue();
+                //CheckMemory();
+                //ApplySlowEffect();
             }
             else
             {
+                // TODO: normal mirror operation
+                //reset everything
                 storedFrames.Clear();
+                storedFrames = null;
+                storedFrames = new Queue<byte[]>();
                 slowFactor = 1;
                 slowCount = 0;
                 counter = 0;
@@ -239,7 +248,88 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             }
         }
 
-        private void WriteFrame()
+        private void ApplySlowEffect()
+        {
+            // at 30 fps the delay is 30*seconds
+            if (counter < (30 * delay))
+            {
+                // if we're still in the display period, just show the next frame
+                nextFrameIndexToDoAShow++;
+            }
+            else
+            {
+                // begin slowing down
+                if (slowCount == 30 && slowFactor > minSlowFactor)
+                {
+                    // bump down slowFactor (by easing) to make things a little slower
+                    slowFactor = (slowFactor - easing) < minSlowFactor ? minSlowFactor : (slowFactor - easing);
+                    slowCount = 0;
+                }
+                else
+                {
+                    slowCount++;
+                }
+
+                nextFrameIndexToDoAShow = nextFrameIndexToDoAShow + (1 / slowFactor);
+            }
+        }
+        
+
+
+        bool slowDown = true;
+        bool bottomHit = false;
+
+        private void ApplySlowFastEffect()
+        {
+            if (slowDown)
+            {
+                // begin slowing down
+                if (slowFactor > minSlowFactor)
+                {
+                    if (slowCount == 30)
+                    {
+                        // bump down slowFactor (by easing) to make things a little slower
+                        slowFactor = (slowFactor - easing) < minSlowFactor ? minSlowFactor : (slowFactor - easing);
+                        slowCount = 0;
+                    }
+                    else
+                    {
+                        slowCount++;
+                    }
+                }
+                else
+                {
+                    Debug.WriteLine("slowest");
+                    slowDown = false;
+                }
+            }
+            else
+            {
+                // begin speeding up
+                if (slowFactor < maxFastFactor)
+                {
+                    if (slowCount == 30)
+                    {
+                        // bump up slowFactor (by easing) to make things a little faster
+                        slowFactor = (slowFactor + easing) > maxFastFactor ? maxFastFactor : (slowFactor + easing);
+                        slowCount = 0;
+                    }
+                    else
+                    {
+                        slowCount++;
+                    }
+                }
+                else
+                {
+                    Debug.WriteLine("fastest");
+                    slowDown = true;
+                }
+            }
+            
+            nextFrameIndexToDoAShow = nextFrameIndexToDoAShow + (1 / slowFactor);
+        }
+
+        private void WriteFrameFromQueue()
         {
             // short circuit and don't change the writeable bitmap
             if (counter++ != Math.Round(nextFrameIndexToDoAShow))
@@ -258,28 +348,10 @@ namespace Microsoft.Samples.Kinect.ColorBasics
 
             this.colorBitmap.Unlock();
 
-            // at 30 fps the delay is 30*seconds
-            if (counter < (30 * delay))
-            {
-                nextFrameIndexToDoAShow++;
-            }
-            else
-            {
-                if (slowCount==30 && slowFactor > minSlowFactor)
-                {
-                    slowFactor = (slowFactor - easing) < minSlowFactor ? minSlowFactor : (slowFactor - easing);
-                    slowCount = 0;
-                }
-                else
-                {
-                    slowCount++;
-                }
-
-                nextFrameIndexToDoAShow = nextFrameIndexToDoAShow + (1 / slowFactor);
-            }
+            ApplySlowFastEffect();
         }
 
-        private void StoreFrame(ColorFrame colorFrame)
+        private void StoreFrameToQueue(ColorFrame colorFrame)
         {
             FrameDescription colorFrameDescription = colorFrame.FrameDescription;
 
@@ -290,60 +362,183 @@ namespace Microsoft.Samples.Kinect.ColorBasics
 
                 // the incoming image data is in yuy2
                 colorFrame.CopyConvertedFrameDataToArray(bytes, ColorImageFormat.Bgra);
-
-                if (storedFrames.Count > maxFrames)
-                {
-                    storedFrames.Clear();
-                    counter = 0;
-                    nextFrameIndexToDoAShow = 0;
-                }
 
                 // store off the frame into a queue
                 storedFrames.Enqueue(bytes);
             }
         }
 
-        private void StoreFrameCompressed(ColorFrame colorFrame)
+        private void CheckMemory()
         {
-            FrameDescription colorFrameDescription = colorFrame.FrameDescription;
-
-            using (colorFrame.LockRawImageBuffer())
+            // if we've reached the storedFrames ceiling then reset
+            if (storedFrames.Count > maxFrames)
             {
-                BitmapEncoder encoder = new PngBitmapEncoder();
-
-                // Store the color frame data as a byte array
-                byte[] bytes = new byte[colorFrameDescription.Width * colorFrameDescription.Height * _bytePerPixel];
-
-                // the incoming image data is in yuy2
-                colorFrame.CopyConvertedFrameDataToArray(bytes, ColorImageFormat.Bgra);
-
-                using (MemoryStream stream = new MemoryStream(bytes))
-                {
-                    //***********************************************
-                    //TODO: figure out how we can get from the colorframe to something the pngencoder can digest
-                    //***********************************************
-
-                    BitmapFrame bmframe = BitmapFrame.Create(stream);
-
-                    // populate the encoder with data from the colorFrame
-                    encoder.Frames.Add(bmframe);
-                }
-
-                // store the compressed byte stream in the queue
-                using (MemoryStream stream = new MemoryStream())
-                {
-                    encoder.Save(stream);
-                    storedFrames.Enqueue(stream.ToArray());
-                }
-
-                if (storedFrames.Count > maxFrames)
-                {
-                    storedFrames.Clear();
-                    counter = 0;
-                    nextFrameIndexToDoAShow = 0;
-                }
+                storedFrames.Clear();
+                counter = 0;
+                nextFrameIndexToDoAShow = 0;
             }
         }
+
+        #region Compressed
+
+            private WriteableBitmap tempBitmap;
+
+            private int storeCounter = 0;
+
+            private void SlowMotionCompressed(Microsoft.Kinect.ColorFrame colorFrame)
+            {
+                if (storeCounter == 1)
+                {
+                    StoreFrameCompressed(colorFrame);
+                    storeCounter++;
+                }
+                else if (storeCounter == 2)
+                {
+                    WriteFrameCompressed();
+                    storeCounter = 0;
+                }
+                else
+                {
+                    storeCounter++;
+                }
+            }
+
+            private void StoreFrameCompressed(ColorFrame colorFrame)
+            {
+                FrameDescription colorFrameDescription = colorFrame.FrameDescription;
+
+                using (colorFrame.LockRawImageBuffer())
+                {
+                    BitmapEncoder encoder = new PngBitmapEncoder();
+
+                    // Store the color frame data as a byte array
+                    byte[] bytes = new byte[colorFrameDescription.Width * colorFrameDescription.Height * _bytePerPixel];
+
+                    // the incoming image data is in yuy2
+                    colorFrame.CopyConvertedFrameDataToArray(bytes, ColorImageFormat.Bgra);
+
+                    // write to the bitmap from the stored byte array in the queue
+                    // so i can get a bitmapsource
+                    this.tempBitmap.FromByteArray(bytes);
+
+                    // create frame from the writable bitmap and add to encoder
+                    BitmapFrame frame = BitmapFrame.Create(this.tempBitmap);
+                    encoder.Frames.Add(frame);
+
+                    byte[] bytesToSave;
+
+                    using (MemoryStream streamToSave = new MemoryStream())
+                    {
+                        encoder.Save(streamToSave);
+                        bytesToSave = streamToSave.ToArray();
+                    }
+
+                    storedFrames.Enqueue(bytesToSave);
+                    Debug.WriteLine("queue size: " + storedFrames.Count);
+                    //using (MemoryStream stream = new MemoryStream(bytes))
+                    //{
+                    //    //***********************************************
+                    //    //TODO: figure out how we can get from the colorframe to something the pngencoder can digest
+                    //    //***********************************************
+
+                    //    BitmapFrame bmframe = BitmapFrame.Create(stream);
+
+                    //    // populate the encoder with data from the colorFrame
+                    //    encoder.Frames.Add(bmframe);
+                    //}
+
+                    //// store the compressed byte stream in the queue
+                    //using (MemoryStream stream = new MemoryStream())
+                    //{
+                    //    encoder.Save(stream);
+                    //    storedFrames.Enqueue(stream.ToArray());
+                    //}
+
+                    //if (storedFrames.Count > maxFrames)
+                    //{
+                    //    storedFrames.Clear();
+                    //    counter = 0;
+                    //    nextFrameIndexToDoAShow = 0;
+                    //}
+                }
+            }
+
+            private void WriteFrameCompressed()
+        {
+            // short circuit and don't change the writeable bitmap
+            //if (counter++ != Math.Round(nextFrameIndexToDoAShow))
+            //{
+            //    return;
+            //}
+
+            Debug.WriteLine("Write");
+
+            // this.colorBitmap is a WriteableBitmap on my WPF window
+            //this.colorBitmap.Lock();
+
+            byte[] bytes = storedFrames.Dequeue();
+
+            PngBitmapDecoder decoder;
+
+            BitmapSource bitmapSource;
+
+            // Open a Stream and decode a PNG image
+            using (MemoryStream stream = new MemoryStream(bytes))
+            {
+                decoder = new PngBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.Default);
+                bitmapSource = decoder.Frames[0];
+
+                // Calculate stride of source
+                int stride = bitmapSource.PixelWidth * (bitmapSource.Format.BitsPerPixel / 8);
+
+                // Create data array to hold source pixel data
+                byte[] data = new byte[stride * bitmapSource.PixelHeight];
+
+                // Copy source image pixels to the data array
+                bitmapSource.CopyPixels(data, stride, 0);
+
+                // Write the pixel data to the WriteableBitmap.
+                this.colorBitmap.WritePixels(
+                  new Int32Rect(0, 0, bitmapSource.PixelWidth, bitmapSource.PixelHeight),
+                  data, stride, 0);
+
+                this.colorBitmap.Lock();
+                this.colorBitmap.AddDirtyRect(new Int32Rect(0, 0, this.colorBitmap.PixelWidth, this.colorBitmap.PixelHeight));
+                this.colorBitmap.Unlock();
+            }
+
+            
+
+            //this.colorBitmap = new WriteableBitmap(bitmapSource);
+            //this.colorBitmap = (WriteableBitmap)bitmapSource;
+
+            // write to the bitmap from the stored byte array in the queue
+            //this.colorBitmap.FromByteArray(storedFrames.Dequeue());
+
+            //this.colorBitmap.Unlock();
+
+            //// at 30 fps the delay is 30*seconds
+            //if (counter < (30 * delay))
+            //{
+            //    nextFrameIndexToDoAShow++;
+            //}
+            //else
+            //{
+            //    if (slowCount == 30 && slowFactor > minSlowFactor)
+            //    {
+            //        slowFactor = (slowFactor - easing) < minSlowFactor ? minSlowFactor : (slowFactor - easing);
+            //        slowCount = 0;
+            //    }
+            //    else
+            //    {
+            //        slowCount++;
+            //    }
+
+            //    nextFrameIndexToDoAShow = nextFrameIndexToDoAShow + (1 / slowFactor);
+            //}
+        }
+
+        #endregion
 
         /// <summary>
         /// Handles the event which the sensor becomes unavailable (E.g. paused, closed, unplugged).
@@ -381,7 +576,7 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             {
                 bool dataReceived = false;
 
-                Debug.WriteLine("Missed Count = " + missedCount);
+                //Debug.WriteLine("Missed Count = " + missedCount);
 
                 using (BodyFrame bodyFrame = e.FrameReference.AcquireFrame())
                 {
@@ -421,11 +616,11 @@ namespace Microsoft.Samples.Kinect.ColorBasics
                     return;
                 } else if(skeletonBuffer < framesAfterSkeleton) {
                     skeletonBuffer++;
-                    Debug.WriteLine("skeletonbuffer is " + skeletonBuffer);
+                    //Debug.WriteLine("skeletonbuffer is " + skeletonBuffer);
                     return;
                 }
 
-                Debug.WriteLine("No skeleton tracked");
+                //Debug.WriteLine("No skeleton tracked");
                 skeletonAcquired = false;
             }
 
