@@ -24,25 +24,10 @@ namespace Microsoft.Samples.Kinect.ColorBasics
     public partial class MainWindow : Window, INotifyPropertyChanged
     {
         private KinectSensor kinectSensor = null;
-
-        /// <summary>
-        /// Reader for color frames
-        /// </summary>
         private ColorFrameReader colorFrameReader = null;
-
-        /// <summary>
-        /// Bitmap to display
-        /// </summary>
         private WriteableBitmap colorBitmap = null;
-
-        /// <summary>
-        /// Current status text to display
-        /// </summary>
         private string statusText = null;
 
-        /// <summary>
-        /// Initializes a new instance of the MainWindow class.
-        /// </summary>
         public MainWindow()
         {
             // get the kinectSensor object
@@ -88,14 +73,8 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             this.InitializeComponent();
         }
 
-        /// <summary>
-        /// INotifyPropertyChangedPropertyChanged event to allow window controls to bind to changeable data
-        /// </summary>
         public event PropertyChangedEventHandler PropertyChanged;
 
-        /// <summary>
-        /// Gets the bitmap to display
-        /// </summary>
         public ImageSource ImageSource
         {
             get
@@ -104,9 +83,6 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             }
         }
 
-        /// <summary>
-        /// Gets or sets the current status text to display
-        /// </summary>
         public string StatusText
         {
             get
@@ -129,11 +105,6 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             }
         }
 
-        /// <summary>
-        /// Execute shutdown tasks
-        /// </summary>
-        /// <param name="sender">object sending the event</param>
-        /// <param name="e">event arguments</param>
         private void MainWindow_Closing(object sender, CancelEventArgs e)
         {
             if (this.colorFrameReader != null)
@@ -150,11 +121,6 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             }
         }
 
-        /// <summary>
-        /// Handles the user clicking on the screenshot button
-        /// </summary>
-        /// <param name="sender">object sending the event</param>
-        /// <param name="e">event arguments</param>
         private void ScreenshotButton_Click(object sender, RoutedEventArgs e)
         {
             if (this.colorBitmap != null)
@@ -189,11 +155,6 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             }
         }
 
-        /// <summary>
-        /// Handles the color frame data arriving from the sensor
-        /// </summary>
-        /// <param name="sender">object sending the event</param>
-        /// <param name="e">event arguments</param>
         private void Reader_ColorFrameArrived(object sender, ColorFrameArrivedEventArgs e)
         {
             using (ColorFrame colorFrame = e.FrameReference.AcquireFrame())
@@ -205,17 +166,16 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             }
         }
 
-        
-        private int delay = 1; // number of seconds to show in real time before beginning slowdown
+        private int delay = 0; // number of seconds to show in real time before beginning slowdown
         private double easing = 0.1;  // amount to start slowing every second after the initial delay
         private double minSlowFactor = 0.5; // the slowest the slowmo goes. lower = slower
         double maxFastFactor = 2;
 
-        private double slowFactor = 1;
-        private double slowCount = 0;
-        private int counter = 0;
-        private double nextFrameIndexToDoAShow = 0;
-        private int maxFrames = 20000;  // run out of memory at around 184 frames right now...which means each frame is 10.8MB (!)
+        double slowFactor = 1;
+        double slowCount = 0;
+        double idealLag = 1;
+        double counter = 0;
+        int maxFrames = 20000;  // run out of memory at around 184 frames right now...which means each frame is 10.8MB (!)
 
         private Queue<byte[]> storedFrames = new Queue<byte[]>();
 
@@ -228,10 +188,37 @@ namespace Microsoft.Samples.Kinect.ColorBasics
         {
             if (!skeletonActivate || skeletonAcquired )
             {
+                Debug.WriteLine("Count: " + storedFrames.Count + " Lag: " + idealLag);
                 StoreFrameToQueue(colorFrame);
+
+                //Debug.WriteLine("sfcount = " + storedFrames.Count + ", lfcount = " + lagFramesCount);
+                int diff = (int)Math.Ceiling(idealLag) - storedFrames.Count;
+                Debug.WriteLine("Count: " + storedFrames.Count + " Lag: " + idealLag + " Diff: " + diff);
+
+                // if we are slowing down then the idealLag will grow and storedFrames will have to grow to compensate
+                if (storedFrames.Count==0 || diff > 0)
+                    return;
+
+                if (diff < 0)
+                {
+                    //TODO: if we're speeding up then we might need to dequeue more than one frame
+                    while (diff < 0)
+                    {
+                        storedFrames.Dequeue();
+                        diff++;
+                    }
+                }
+
+                if( storedFrames.Count == 0)
+                {
+                    int crap = 0;
+                    return;
+                }
+
                 WriteFrameFromQueue();
+                idealLag--; //something is wrong here
+                ApplySlowFastEffect(); // increments idealLag with slowness added in
                 //CheckMemory();
-                //ApplySlowEffect();
             }
             else
             {
@@ -243,9 +230,16 @@ namespace Microsoft.Samples.Kinect.ColorBasics
                 slowFactor = 1;
                 slowCount = 0;
                 counter = 0;
-                nextFrameIndexToDoAShow = 0;
+                idealLag = 0;
                 this.colorBitmap.Clear(System.Windows.Media.Color.FromRgb(0, 0, 0));
             }
+
+            counter++;
+        }
+
+        private void ApplySlowFastEffect2()
+        {
+            idealLag++;
         }
 
         private void ApplySlowEffect()
@@ -254,10 +248,12 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             if (counter < (30 * delay))
             {
                 // if we're still in the display period, just show the next frame
-                nextFrameIndexToDoAShow++;
+                Debug.WriteLine("Still in delay period");
             }
             else
             {
+                Debug.WriteLine("Beginning slowdown");
+
                 // begin slowing down
                 if (slowCount == 30 && slowFactor > minSlowFactor)
                 {
@@ -270,17 +266,22 @@ namespace Microsoft.Samples.Kinect.ColorBasics
                     slowCount++;
                 }
 
-                nextFrameIndexToDoAShow = nextFrameIndexToDoAShow + (1 / slowFactor);
+                idealLag = idealLag + (1 / slowFactor);
+                Debug.WriteLine("lfc is now " + idealLag);
             }
         }
-        
-
 
         bool slowDown = true;
-        bool bottomHit = false;
 
         private void ApplySlowFastEffect()
         {
+            if (idealLag < 0)
+            {
+                Debug.WriteLine("Flipping");
+                slowDown = true;
+                idealLag = 0;
+            }
+
             if (slowDown)
             {
                 // begin slowing down
@@ -288,6 +289,7 @@ namespace Microsoft.Samples.Kinect.ColorBasics
                 {
                     if (slowCount == 30)
                     {
+                        Debug.WriteLine("Slowing Down");
                         // bump down slowFactor (by easing) to make things a little slower
                         slowFactor = (slowFactor - easing) < minSlowFactor ? minSlowFactor : (slowFactor - easing);
                         slowCount = 0;
@@ -306,10 +308,11 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             else
             {
                 // begin speeding up
-                if (slowFactor < maxFastFactor)
+                if (slowFactor < maxFastFactor && storedFrames.Count!=0)
                 {
                     if (slowCount == 30)
                     {
+                        Debug.WriteLine("Speeding Up");
                         // bump up slowFactor (by easing) to make things a little faster
                         slowFactor = (slowFactor + easing) > maxFastFactor ? maxFastFactor : (slowFactor + easing);
                         slowCount = 0;
@@ -325,18 +328,14 @@ namespace Microsoft.Samples.Kinect.ColorBasics
                     slowDown = true;
                 }
             }
-            
-            nextFrameIndexToDoAShow = nextFrameIndexToDoAShow + (1 / slowFactor);
+
+            idealLag = idealLag + (1 / slowFactor);
+
+            //Debug.WriteLine("lfc is now " + lagFramesCount);
         }
 
         private void WriteFrameFromQueue()
         {
-            // short circuit and don't change the writeable bitmap
-            if (counter++ != Math.Round(nextFrameIndexToDoAShow))
-            {
-                return;
-            }
-
             //Debug.WriteLine("counter = " + counter + " and nfitdas = " + nextFrameIndexToDoAShow);
             //Debug.WriteLine("FrameList count = " + storedFrames.Count);
 
@@ -347,8 +346,6 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             this.colorBitmap.FromByteArray(storedFrames.Dequeue());
 
             this.colorBitmap.Unlock();
-
-            ApplySlowFastEffect();
         }
 
         private void StoreFrameToQueue(ColorFrame colorFrame)
@@ -375,7 +372,7 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             {
                 storedFrames.Clear();
                 counter = 0;
-                nextFrameIndexToDoAShow = 0;
+                idealLag = 0;
             }
         }
 
