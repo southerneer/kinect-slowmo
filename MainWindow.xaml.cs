@@ -113,6 +113,14 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             }
         }
 
+        public string Lag
+        {
+            get
+            {
+                return (idealLag-storedFrames.Count).ToString("0.00");
+            }
+        }
+
         private void MainWindow_Closing(object sender, CancelEventArgs e)
         {
             if (this.colorFrameReader != null)
@@ -169,7 +177,17 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             {
                 if (colorFrame != null)
                 {
-                    SlowMotion(colorFrame);
+                    if ( !skeletonActivate || skeletonAcquired )
+                    {
+                        SlowMotion(colorFrame);
+                    }
+                    else
+                    {
+                        Mirror(colorFrame);
+                    }
+                }
+                else {
+                    Debug.WriteLine("WARNING: Missed a frame!");
                 }
             }
         }
@@ -183,13 +201,15 @@ namespace Microsoft.Samples.Kinect.ColorBasics
         double slowCount = 0;
         double idealLag = 0;
         double counter = 0;
+        bool slowDown = true;
+        bool nextFrameShouldBeWritten = true;
 
         private Queue<byte[]> storedFrames = new Queue<byte[]>();
 
         /// Size for the RGB pixel in bitmap. I don't understand how this is calculated
         private readonly int _bytePerPixel = (PixelFormats.Bgr32.BitsPerPixel + 7) / 8;
 
-        bool skeletonActivate = false; // switch for activating slowmo on skeleton
+        bool skeletonActivate = true; // switch for activating slowmo on skeleton
 
         int consecutiveNoWrites = 0;
         public string ConsecutiveNoWrites
@@ -203,127 +223,54 @@ namespace Microsoft.Samples.Kinect.ColorBasics
 
         private void SlowMotion(Microsoft.Kinect.ColorFrame colorFrame)
         {
-            if ( !skeletonActivate || skeletonAcquired )
+            StoreFrameToQueue(colorFrame);
+            this.PropertyChanged(this, new PropertyChangedEventArgs("StoredFrames"));
+
+            ApplySlowFastEffect(); // increments idealLag with slowness added in
+
+            if (nextFrameShouldBeWritten)
             {
-                StoreFrameToQueue(colorFrame);
-                this.PropertyChanged(this, new PropertyChangedEventArgs("StoredFrames"));
+                WriteFrameFromQueue();
 
-                ApplySlowFastEffect(); // increments idealLag with slowness added in
-
-                if (FrameShouldBeWritten())
+                if (consecutiveNoWrites > 0)
                 {
-                    WriteFrameFromQueue();
-                    idealLag--;
-
-                    if (consecutiveNoWrites > 0)
-                    {
-                        consecutiveNoWrites = 0;
-                        this.PropertyChanged(this, new PropertyChangedEventArgs("ConsecutiveNoWrites"));
-                    }
-                }
-                else
-                {
-                    consecutiveNoWrites++;
-                    if (consecutiveNoWrites > 2)
-                        Debugger.Break();
+                    consecutiveNoWrites = 0;
                     this.PropertyChanged(this, new PropertyChangedEventArgs("ConsecutiveNoWrites"));
                 }
             }
             else
             {
-                //reset everything
-                storedFrames.Clear();
-                slowFactor = 1;
-                slowCount = 0;
-                counter = 0;
-                idealLag = 0;
-                //this.colorBitmap.Clear(System.Windows.Media.Color.FromRgb(0, 0, 0));
-
-                Mirror(colorFrame);
+                consecutiveNoWrites++;
+                if (consecutiveNoWrites > 2)
+                {
+                    Debug.WriteLine("REWRITE!!");
+                }
+                this.PropertyChanged(this, new PropertyChangedEventArgs("ConsecutiveNoWrites"));
             }
 
             counter++;
         }
 
-        private bool FrameShouldBeWritten()
+        private void ResetStuff()
         {
-            if (storedFrames.Count == 0)
-            {
-                Debugger.Break();
-                Debug.WriteLine("WARNING: 0 stored frames so we're booting");
-                idealLag--;
-                return false;
-            }
-
-            // if we are slowing down then the idealLag will grow and storedFrames will have to grow to compensate
-            if (idealLag > storedFrames.Count)
-            {
-                idealLag--;
-                return false;
-            }
-            else
-            {
-                //TODO: if we're speeding up then we might need to dequeue more than one frame
-                while (idealLag-storedFrames.Count < -1)
-                {
-                    storedFrames.Dequeue();
-                    this.PropertyChanged(this, new PropertyChangedEventArgs("StoredFrames"));
-                    if (storedFrames.Count == 0)
-                    {
-                        Debugger.Break();
-                    }
-                }
-            }
-
-            //basically only returns true when diff==0 which means we're at the idealLag and a frame should be written
-            return true;
+            Debug.WriteLine("resetting stuff");
+            storedFrames.Clear();
+            slowFactor = 1;
+            slowCount = 0;
+            counter = 0;
+            idealLag = 0;
+            slowDown = true;
+            nextFrameShouldBeWritten = true;
+            consecutiveNoWrites = 0;
+            this.PropertyChanged(this, new PropertyChangedEventArgs("Lag"));
         }
-
-        private void ApplySlowEffect()
-        {
-            // at 30 fps the delay is 30*seconds
-            if (counter < (30 * delay))
-            {
-                // if we're still in the display period, just show the next frame
-                Debug.WriteLine("Still in delay period");
-            }
-            else
-            {
-                Debug.WriteLine("Beginning slowdown");
-
-                // begin slowing down
-                if (slowCount == 30 && slowFactor > minSlowFactor)
-                {
-                    // bump down slowFactor (by easing) to make things a little slower
-                    slowFactor = (slowFactor - easing) < minSlowFactor ? minSlowFactor : (slowFactor - easing);
-                    slowCount = 0;
-                }
-                else
-                {
-                    slowCount++;
-                }
-
-                idealLag = idealLag + (1 / slowFactor);
-                Debug.WriteLine("lfc is now " + idealLag);
-            }
-        }
-
-        bool slowDown = true;
 
         private void ApplySlowFastEffect()
         {
-            //HACK: if idealLag goes below 0 then that's bad and we put it back on track
-            //if (idealLag < 0)
-            //{
-            //    Debug.WriteLine("ERROR: idealLag < 0");
-            //    slowDown = true;
-            //    idealLag = 0;
-            //}
-
             if (slowDown)
             {
                 // begin slowing down
-                if (slowFactor > minSlowFactor)
+                if (slowFactor - minSlowFactor > easing)
                 {
                     if (slowCount == 30)
                     {
@@ -346,7 +293,7 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             else
             {
                 // begin speeding up
-                if (slowFactor < maxFastFactor && storedFrames.Count!=0)
+                if (maxFastFactor - slowFactor > easing && storedFrames.Count != 0)
                 {
                     if (slowCount == 30)
                     {
@@ -367,23 +314,43 @@ namespace Microsoft.Samples.Kinect.ColorBasics
                 }
             }
 
+            // if we're still behind on frames then short circuit
+            if (idealLag > storedFrames.Count + 1)
+            {
+                nextFrameShouldBeWritten = false;
+                return;
+            }
+
             idealLag = idealLag + (1 / slowFactor);
+            this.PropertyChanged(this, new PropertyChangedEventArgs("Lag"));
 
             // don't ever get too close!
-            if (storedFrames.Count == 1 && slowFactor > 1)
+            if (storedFrames.Count <= 1 && slowFactor > 1)
             {
+                Debug.WriteLine("WARNING: we're too close");
                 slowFactor = 1;
             }
-                
 
-            //Debug.WriteLine("lfc is now " + lagFramesCount);
+            //if we're speeding up then we might need to dequeue more than one frame
+            while (idealLag < storedFrames.Count && storedFrames.Count > 1)
+            {
+                storedFrames.Dequeue();
+                this.PropertyChanged(this, new PropertyChangedEventArgs("StoredFrames"));
+
+                if (storedFrames.Count == 0)
+                {
+                    Debugger.Break();
+                }
+            }
+
+            nextFrameShouldBeWritten = true;
+            idealLag--;
+
+            this.PropertyChanged(this, new PropertyChangedEventArgs("Lag"));   
         }
 
         private void WriteFrameFromQueue()
         {
-            //Debug.WriteLine("counter = " + counter + " and nfitdas = " + nextFrameIndexToDoAShow);
-            //Debug.WriteLine("FrameList count = " + storedFrames.Count);
-
             // this.colorBitmap is a WriteableBitmap on my WPF window
             this.colorBitmap.Lock();
 
@@ -430,6 +397,35 @@ namespace Microsoft.Samples.Kinect.ColorBasics
                 }
 
                 this.colorBitmap.Unlock();
+            }
+        }
+
+        private void ApplySlowEffect()
+        {
+            // at 30 fps the delay is 30*seconds
+            if (counter < (30 * delay))
+            {
+                // if we're still in the display period, just show the next frame
+                Debug.WriteLine("Still in delay period");
+            }
+            else
+            {
+                Debug.WriteLine("Beginning slowdown");
+
+                // begin slowing down
+                if (slowCount == 30 && slowFactor > minSlowFactor)
+                {
+                    // bump down slowFactor (by easing) to make things a little slower
+                    slowFactor = (slowFactor - easing) < minSlowFactor ? minSlowFactor : (slowFactor - easing);
+                    slowCount = 0;
+                }
+                else
+                {
+                    slowCount++;
+                }
+
+                idealLag = idealLag + (1 / slowFactor);
+                Debug.WriteLine("lfc is now " + idealLag);
             }
         }
 
@@ -669,6 +665,8 @@ namespace Microsoft.Samples.Kinect.ColorBasics
                         if (body.IsTracked)
                         {
                             //Debug.WriteLine("We Have Skeleton!");
+                            if (!skeletonAcquired)
+                                ResetStuff();
                             skeletonAcquired = true;
                             missedCount = 0;
                             skeletonBuffer = 0;
@@ -689,6 +687,9 @@ namespace Microsoft.Samples.Kinect.ColorBasics
                     }
 
                     //Debug.WriteLine("No skeleton tracked");
+                    // We're switching modes
+                    if (skeletonAcquired)
+                        ResetStuff();
                     skeletonAcquired = false;
                 }
 
