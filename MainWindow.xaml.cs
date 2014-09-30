@@ -3,7 +3,7 @@
 //     Copyright (c) Microsoft Corporation.  All rights reserved.
 // </copyright>
 //------------------------------------------------------------------------------
-namespace Microsoft.Samples.Kinect.ColorBasics
+namespace Redwood.Kinect.Slowmo
 {
     using System;
     using System.ComponentModel;
@@ -15,7 +15,7 @@ namespace Microsoft.Samples.Kinect.ColorBasics
     using System.Windows.Media.Imaging;
     using Microsoft.Kinect;
     using System.Collections.Generic;
-    using System.Drawing;
+    //using System.Drawing;
     using System.Drawing.Imaging;
 
     /// <summary>
@@ -28,50 +28,7 @@ namespace Microsoft.Samples.Kinect.ColorBasics
         private WriteableBitmap colorBitmap = null;
         private string statusText = null;
 
-        public MainWindow()
-        {
-            // get the kinectSensor object
-            this.kinectSensor = KinectSensor.GetDefault();
-
-            // open the reader for the color frames
-            this.colorFrameReader = this.kinectSensor.ColorFrameSource.OpenReader();
-
-            // open the reader for the body frames
-            this.bodyFrameReader = this.kinectSensor.BodyFrameSource.OpenReader();
-
-            // wire handler for frame arrival
-            this.colorFrameReader.FrameArrived += this.Reader_ColorFrameArrived;
-
-            // wire handler for skeleton data
-            if (skeletonActivate )
-                this.bodyFrameReader.FrameArrived += this.BodyReader_FrameArrived;
-
-            // create the colorFrameDescription from the ColorFrameSource using Bgra format
-            FrameDescription colorFrameDescription = this.kinectSensor.ColorFrameSource.CreateFrameDescription(ColorImageFormat.Bgra);
-
-            // create the bitmap to display
-            //this.colorBitmap = new WriteableBitmap(colorFrameDescription.Width, colorFrameDescription.Height, 96.0, 96.0, PixelFormats.Bgr32, null);
-            this.colorBitmap = BitmapFactory.New(colorFrameDescription.Width, colorFrameDescription.Height);
-
-            // we only need this if we're doing the compressed version
-            //this.tempBitmap = BitmapFactory.New(colorFrameDescription.Width, colorFrameDescription.Height);
-
-            // set IsAvailableChanged event notifier
-            this.kinectSensor.IsAvailableChanged += this.Sensor_IsAvailableChanged;
-
-            // open the sensor
-            this.kinectSensor.Open();
-
-            // set the status text
-            this.StatusText = this.kinectSensor.IsAvailable ? Properties.Resources.RunningStatusText
-                                                            : Properties.Resources.NoSensorStatusText;
-
-            // use the window object as the view model in this simple example
-            this.DataContext = this;
-
-            // initialize the components (controls) of the window
-            this.InitializeComponent();
-        }
+        #region Dependency Properties
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -117,7 +74,114 @@ namespace Microsoft.Samples.Kinect.ColorBasics
         {
             get
             {
-                return (idealLag-storedFrames.Count).ToString("0.00");
+                return (idealLag - storedFrames.Count).ToString("0.00");
+            }
+        }
+
+
+        Brush _fill = Brushes.Red;
+        public Brush EllipseFill
+        {
+            get { return _fill; }
+            set
+            {
+                _fill = value;
+
+                if (this.PropertyChanged != null)
+                {
+                    this.PropertyChanged(this, new PropertyChangedEventArgs("EllipseFill"));
+                }
+            }
+        }
+
+        
+        public double EllipseDiameter
+        {
+            get { return _diam; }
+            set
+            {
+                _diam = value;
+
+                if (this.PropertyChanged != null)
+                {
+                    this.PropertyChanged(this, new PropertyChangedEventArgs("EllipseDiameter"));
+                }
+            }
+        }
+
+        public double EllipseOpacity
+        {
+            get { return _opacity; }
+            set
+            {
+                _opacity = value;
+
+                if (this.PropertyChanged != null)
+                {
+                    this.PropertyChanged(this, new PropertyChangedEventArgs("EllipseOpacity"));
+                }
+            }
+        }
+
+        #endregion
+
+        public MainWindow()
+        {
+            // get the kinectSensor object
+            this.kinectSensor = KinectSensor.GetDefault();
+
+            // open the reader for the color frames
+            this.colorFrameReader = this.kinectSensor.ColorFrameSource.OpenReader();
+
+            // this does nothing
+            this.colorFrameReader.ColorFrameSource.CreateFrameDescription(ColorImageFormat.Yuy2);
+
+
+            // open the reader for the body frames
+            this.bodyFrameReader = this.kinectSensor.BodyFrameSource.OpenReader();
+
+            // wire handler for frame arrival
+            this.colorFrameReader.FrameArrived += this.Reader_ColorFrameArrived;
+
+            // wire handler for skeleton data
+            if (skeletonActivate )
+                this.bodyFrameReader.FrameArrived += this.BodyReader_FrameArrived;
+
+            // create the colorFrameDescription from the ColorFrameSource using Bgra format
+            FrameDescription colorFrameDescription = this.kinectSensor.ColorFrameSource.CreateFrameDescription(ColorImageFormat.Bgra);
+
+            // create the bitmap to display
+            //this.colorBitmap = new WriteableBitmap(colorFrameDescription.Width, colorFrameDescription.Height, 96.0, 96.0, PixelFormats.Bgr32, null);
+            this.colorBitmap = BitmapFactory.New(colorFrameDescription.Width, colorFrameDescription.Height);
+
+            // we only need this if we're doing the compressed version
+            //this.tempBitmap = BitmapFactory.New(colorFrameDescription.Width, colorFrameDescription.Height);
+
+            // set IsAvailableChanged event notifier
+            this.kinectSensor.IsAvailableChanged += this.Sensor_IsAvailableChanged;
+
+            // open the sensor
+            this.kinectSensor.Open();
+
+            // set the status text
+            this.StatusText = this.kinectSensor.IsAvailable ? Properties.Resources.RunningStatusText
+                                                            : Properties.Resources.NoSensorStatusText;
+
+            // use the window object as the view model in this simple example
+            this.DataContext = this;
+
+            // initialize the components (controls) of the window
+            this.InitializeComponent();
+        }
+
+        
+
+        int missedFrameCount = 0;
+        public int MissedFrames
+        {
+            get
+            {
+                return missedFrameCount;
             }
         }
 
@@ -188,12 +252,14 @@ namespace Microsoft.Samples.Kinect.ColorBasics
                 }
                 else {
                     Debug.WriteLine("WARNING: Missed a frame!");
+                    missedFrameCount++;
+                    this.PropertyChanged(this, new PropertyChangedEventArgs("MissedFrames"));
                 }
             }
         }
 
         private int delay = 3; // number of seconds to show in real time before beginning slowdown
-        private double easing = 0.1;  // amount to start slowing every second after the initial delay
+        private double easing = 0.05;  // amount to start slowing every second after the initial delay
         private double minSlowFactor = 0.5; // the slowest the slowmo goes. lower = slower
         double maxFastFactor = 2;
 
@@ -209,7 +275,7 @@ namespace Microsoft.Samples.Kinect.ColorBasics
         /// Size for the RGB pixel in bitmap. I don't understand how this is calculated
         private readonly int _bytePerPixel = (PixelFormats.Bgr32.BitsPerPixel + 7) / 8;
 
-        bool skeletonActivate = true; // switch for activating slowmo on skeleton
+        bool skeletonActivate = false; // switch for activating slowmo on skeleton
 
         int consecutiveNoWrites = 0;
         public string ConsecutiveNoWrites
@@ -220,13 +286,14 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             }
         }
         
-
         private void SlowMotion(Microsoft.Kinect.ColorFrame colorFrame)
         {
             StoreFrameToQueue(colorFrame);
             this.PropertyChanged(this, new PropertyChangedEventArgs("StoredFrames"));
 
             ApplySlowFastEffect(); // increments idealLag with slowness added in
+
+            Pulse();
 
             if (nextFrameShouldBeWritten)
             {
@@ -263,6 +330,10 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             nextFrameShouldBeWritten = true;
             consecutiveNoWrites = 0;
             this.PropertyChanged(this, new PropertyChangedEventArgs("Lag"));
+            this.PropertyChanged(this, new PropertyChangedEventArgs("ConsecutiveNoWrites"));
+            this.PropertyChanged(this, new PropertyChangedEventArgs("StoredFrames"));
+            this.EllipseDiameter = 10;
+            this.EllipseFill = Brushes.Transparent;
         }
 
         private void ApplySlowFastEffect()
@@ -329,6 +400,8 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             {
                 Debug.WriteLine("WARNING: we're too close");
                 slowFactor = 1;
+                slowDown = true;
+                slowCount = 0;
             }
 
             //if we're speeding up then we might need to dequeue more than one frame
@@ -347,6 +420,69 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             idealLag--;
 
             this.PropertyChanged(this, new PropertyChangedEventArgs("Lag"));   
+        }
+
+        double _diam = 40;
+        private int _minDiameter = 30;
+        private int _maxDiameter = 60;
+        private bool _oldSlowDown = true;
+        private bool _diamGrowing = true;
+        private double _diamGrowthFactor = 1;
+        private double _opacity = 1;
+        private double _opacityGrowthFactor = .05;
+
+        /// <summary>
+        /// Change the indicator light based on app status
+        /// </summary>
+        private void Pulse()
+        {
+            if (slowDown != _oldSlowDown )
+            {
+                if( slowDown )
+                    EllipseFill = Brushes.Red;
+                else
+                    EllipseFill = Brushes.Green;
+
+                _oldSlowDown = slowDown;
+            }
+
+            //if (_diamGrowing)
+            //{
+            //    if (EllipseDiameter + _diamGrowthFactor < _maxDiameter )
+            //    {
+            //        EllipseDiameter = EllipseDiameter + _diamGrowthFactor;
+            //    }
+            //    else 
+            //        _diamGrowing = false;
+            //}
+            //else
+            //{
+            //    if (EllipseDiameter - _diamGrowthFactor > _minDiameter)
+            //    {
+            //        EllipseDiameter = EllipseDiameter - _diamGrowthFactor;
+            //    }
+            //    else 
+            //        _diamGrowing = true;
+            //}
+
+            if (_diamGrowing)
+            {
+                if (_opacity + _opacityGrowthFactor <= 1)
+                {
+                    EllipseOpacity = _opacity + _opacityGrowthFactor;
+                }
+                else
+                    _diamGrowing = false;
+            }
+            else
+            {
+                if (_opacity - _opacityGrowthFactor >= 0)
+                {
+                    EllipseOpacity = _opacity - _opacityGrowthFactor;
+                }
+                else
+                    _diamGrowing = true;
+            }
         }
 
         private void WriteFrameFromQueue()
@@ -614,7 +750,6 @@ namespace Microsoft.Samples.Kinect.ColorBasics
             this.StatusText = this.kinectSensor.IsAvailable ? Properties.Resources.RunningStatusText
                                                             : Properties.Resources.SensorNotAvailableStatusText;
         }
-
 
         #region Skeleton Tracking
 
