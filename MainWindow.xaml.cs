@@ -259,7 +259,8 @@ namespace Redwood.Kinect.Slowmo
         }
 
         private int delay = 3; // number of seconds to show in real time before beginning slowdown
-        private double easing = 0.05;  // amount to start slowing every second after the initial delay
+        private double easingDown = 0.05;  // amount to start slowing every second after the initial delay
+        private double easingUp = .25;
         private double minSlowFactor = 0.5; // the slowest the slowmo goes. lower = slower
         double maxFastFactor = 2;
 
@@ -341,13 +342,13 @@ namespace Redwood.Kinect.Slowmo
             if (slowDown)
             {
                 // begin slowing down
-                if (slowFactor - minSlowFactor > easing)
+                if (slowFactor - easingDown >= minSlowFactor )
                 {
                     if (slowCount == 30)
                     {
                         Debug.WriteLine("Slowing Down");
                         // bump down slowFactor (by easing) to make things a little slower
-                        slowFactor = (slowFactor - easing) < minSlowFactor ? minSlowFactor : (slowFactor - easing);
+                        slowFactor = slowFactor - easingDown;
                         slowCount = 0;
                     }
                     else
@@ -364,13 +365,13 @@ namespace Redwood.Kinect.Slowmo
             else
             {
                 // begin speeding up
-                if (maxFastFactor - slowFactor > easing && storedFrames.Count != 0)
+                if (slowFactor + easingUp <= maxFastFactor && storedFrames.Count != 0)
                 {
                     if (slowCount == 30)
                     {
                         Debug.WriteLine("Speeding Up");
                         // bump up slowFactor (by easing) to make things a little faster
-                        slowFactor = (slowFactor + easing) > maxFastFactor ? maxFastFactor : (slowFactor + easing);
+                        slowFactor = slowFactor + easingUp;
                         slowCount = 0;
                     }
                     else
@@ -446,6 +447,7 @@ namespace Redwood.Kinect.Slowmo
                 _oldSlowDown = slowDown;
             }
 
+            // Grow and shrink effect
             //if (_diamGrowing)
             //{
             //    if (EllipseDiameter + _diamGrowthFactor < _maxDiameter )
@@ -552,7 +554,7 @@ namespace Redwood.Kinect.Slowmo
                 if (slowCount == 30 && slowFactor > minSlowFactor)
                 {
                     // bump down slowFactor (by easing) to make things a little slower
-                    slowFactor = (slowFactor - easing) < minSlowFactor ? minSlowFactor : (slowFactor - easing);
+                    slowFactor = (slowFactor - easingDown) < minSlowFactor ? minSlowFactor : (slowFactor - easingDown);
                     slowCount = 0;
                 }
                 else
