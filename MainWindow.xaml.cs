@@ -15,6 +15,7 @@ namespace Redwood.Kinect.Slowmo
     using System.Windows.Media.Imaging;
     using Microsoft.Kinect;
     using System.Collections.Generic;
+
     using System.Drawing.Imaging;
 
     /// <summary>
