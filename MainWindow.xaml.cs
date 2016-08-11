@@ -78,50 +78,51 @@ namespace Redwood.Kinect.Slowmo
             }
         }
 
+        #region Blinker Stuff
 
-        Brush _fill = Brushes.Red;
-        public Brush EllipseFill
-        {
-            get { return _fill; }
-            set
+            Brush _fill = Brushes.Red;
+            public Brush EllipseFill
             {
-                _fill = value;
-
-                if (this.PropertyChanged != null)
+                get { return _fill; }
+                set
                 {
-                    this.PropertyChanged(this, new PropertyChangedEventArgs("EllipseFill"));
+                    _fill = value;
+
+                    if (this.PropertyChanged != null)
+                    {
+                        this.PropertyChanged(this, new PropertyChangedEventArgs("EllipseFill"));
+                    }
                 }
             }
-        }
-
         
-        public double EllipseDiameter
-        {
-            get { return _diam; }
-            set
+            public double EllipseDiameter
             {
-                _diam = value;
-
-                if (this.PropertyChanged != null)
+                get { return _diam; }
+                set
                 {
-                    this.PropertyChanged(this, new PropertyChangedEventArgs("EllipseDiameter"));
+                    _diam = value;
+
+                    if (this.PropertyChanged != null)
+                    {
+                        this.PropertyChanged(this, new PropertyChangedEventArgs("EllipseDiameter"));
+                    }
                 }
             }
-        }
 
-        public double EllipseOpacity
-        {
-            get { return _opacity; }
-            set
+            public double EllipseOpacity
             {
-                _opacity = value;
-
-                if (this.PropertyChanged != null)
+                get { return _opacity; }
+                set
                 {
-                    this.PropertyChanged(this, new PropertyChangedEventArgs("EllipseOpacity"));
+                    _opacity = value;
+
+                    if (this.PropertyChanged != null)
+                    {
+                        this.PropertyChanged(this, new PropertyChangedEventArgs("EllipseOpacity"));
+                    }
                 }
             }
-        }
+        #endregion
 
         #endregion
 
@@ -133,8 +134,8 @@ namespace Redwood.Kinect.Slowmo
             // open the reader for the color frames
             this.colorFrameReader = this.kinectSensor.ColorFrameSource.OpenReader();
 
-            // this does nothing
-            this.colorFrameReader.ColorFrameSource.CreateFrameDescription(ColorImageFormat.Yuy2);
+            // this does nothing?
+            //this.colorFrameReader.ColorFrameSource.CreateFrameDescription(ColorImageFormat.Yuy2);
 
 
             // open the reader for the body frames
@@ -201,39 +202,6 @@ namespace Redwood.Kinect.Slowmo
             }
         }
 
-        private void ScreenshotButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (this.colorBitmap != null)
-            {
-                // create a png bitmap encoder which knows how to save a .png file
-                BitmapEncoder encoder = new PngBitmapEncoder();
-
-                // create frame from the writable bitmap and add to encoder
-                encoder.Frames.Add(BitmapFrame.Create(this.colorBitmap));
-
-                string time = System.DateTime.Now.ToString("hh'-'mm'-'ss", CultureInfo.CurrentUICulture.DateTimeFormat);
-
-                string myPhotos = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
-
-                string path = Path.Combine(myPhotos, "KinectScreenshot-Color-" + time + ".png");
-
-                // write the new file to disk
-                try
-                {
-                    // FileStream is IDisposable
-                    using (FileStream fs = new FileStream(path, FileMode.Create))
-                    {
-                        encoder.Save(fs);
-                    }
-
-                    this.StatusText = string.Format(Properties.Resources.SavedScreenshotStatusTextFormat, path);
-                }
-                catch (IOException)
-                {
-                    this.StatusText = string.Format(Properties.Resources.FailedScreenshotStatusTextFormat, path);
-                }
-            }
-        }
 
         private void Reader_ColorFrameArrived(object sender, ColorFrameArrivedEventArgs e)
         {
@@ -258,6 +226,7 @@ namespace Redwood.Kinect.Slowmo
             }
         }
 
+        // TODO: make all these dependency properties that you can control from the main screen
         private int delay = 3; // number of seconds to show in real time before beginning slowdown
         private double easingDown = 0.05;  // amount to start slowing every second after the initial delay
         private double easingUp = .25;
@@ -515,6 +484,11 @@ namespace Redwood.Kinect.Slowmo
             }
         }
 
+
+        /// <summary>
+        /// Play back 
+        /// </summary>
+        /// <param name="colorFrame"></param>
         private void Mirror(ColorFrame colorFrame)
         {
             FrameDescription colorFrameDescription = colorFrame.FrameDescription;

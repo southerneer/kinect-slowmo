@@ -3,37 +3,51 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="SlowMo Mirror" 
         Width="1024" Height="768"
-        Closing="MainWindow_Closing" WindowState="Maximized"> 
-  <Window.Resources>
-    <Style TargetType="{x:Type Image}">
-      <Setter Property="SnapsToDevicePixels" Value="True" />
-    </Style>
-    <SolidColorBrush x:Key="MediumGreyBrush" Color="#ff6e6e6e" />
-  </Window.Resources>
-  <Grid Margin="0 0 0 0">
+        Closing="MainWindow_Closing" WindowState="Maximized">
+    <Window.Resources>
+        <Style TargetType="{x:Type Image}">
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+        </Style>
+        <SolidColorBrush x:Key="MediumGreyBrush" Color="#ff6e6e6e" />
+    </Window.Resources>
+    <Grid Margin="0 0 0 0">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        
 
-        <Viewbox Grid.Row="1" HorizontalAlignment="Center">
-          <Image Source="{Binding ImageSource}" Stretch="UniformToFill" />
+
+        <Viewbox Grid.Row="0" HorizontalAlignment="Center">
+            <Image Source="{Binding ImageSource}" Stretch="UniformToFill" />
         </Viewbox>
 
-        <Ellipse Fill="{Binding EllipseFill}" Grid.Row="1" HorizontalAlignment="Right" Height="{Binding EllipseDiameter}" Width="{Binding EllipseDiameter}" Opacity="{Binding EllipseOpacity}"
+        <Ellipse Fill="{Binding EllipseFill}" Grid.Row="0" HorizontalAlignment="Right" Height="{Binding EllipseDiameter}" Width="{Binding EllipseDiameter}" Opacity="{Binding EllipseOpacity}"
                  Margin="10,30,30,10" Stroke="Transparent" VerticalAlignment="Top" />
 
+        <StatusBar Grid.Row="1" HorizontalAlignment="Stretch" Name="controlBar" VerticalAlignment="Bottom" Background="White" Foreground="{StaticResource MediumGreyBrush}">
+
+            <Label>MinSlowFactor</Label>
+            <Label>MaxFastFactor</Label>
+            <Label>Easing Up</Label>
+            <Label>Easing Down</Label>
+            <!--<ToggleButton-->
+        </StatusBar>
         <!---->
-        <StatusBar Grid.Row="3" HorizontalAlignment="Stretch" Name="statusBar" VerticalAlignment="Bottom" Background="White" Foreground="{StaticResource MediumGreyBrush}">
-            <Label>StoredFrames: </Label> <StatusBarItem Content="{Binding StoredFrames}" />
+        <StatusBar Grid.Row="2" HorizontalAlignment="Stretch" Name="statusBar" VerticalAlignment="Bottom" Background="White" Foreground="{StaticResource MediumGreyBrush}">
+            
+            <Label>StoredFrames: </Label>
+            <StatusBarItem Content="{Binding StoredFrames}" />
+            
             <Label>Diff:</Label>
             <StatusBarItem Content="{Binding Lag}" />
+            
             <Label>Missed Frames:</Label>
             <StatusBarItem Content="{Binding MissedFrames}" />
+            
+            <Label>Status:</Label>
+            <StatusBarItem Content="{Binding StatusText}" />
         </StatusBar>
     </Grid>
 </Window>
