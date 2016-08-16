@@ -37,7 +37,7 @@
         <!---->
         <StatusBar Grid.Row="2" HorizontalAlignment="Stretch" Name="statusBar" VerticalAlignment="Bottom" Background="White" Foreground="{StaticResource MediumGreyBrush}">
             
-            <Label>StoredFrames: </Label>
+            <Label>StoredFrames 1: </Label>
             <StatusBarItem Content="{Binding StoredFrames}" />
             
             <Label>Diff:</Label>
