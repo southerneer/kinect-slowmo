@@ -27,6 +27,8 @@ namespace Redwood.Kinect.Slowmo
         private ColorFrameReader colorFrameReader = null;
         private WriteableBitmap colorBitmap = null;
         private string statusText = null;
+        private int _width = 1080;
+        private int _height = 1920;
 
         #region Dependency Properties
 
@@ -154,6 +156,7 @@ namespace Redwood.Kinect.Slowmo
             // create the bitmap to display
             //this.colorBitmap = new WriteableBitmap(colorFrameDescription.Width, colorFrameDescription.Height, 96.0, 96.0, PixelFormats.Bgr32, null);
             this.colorBitmap = BitmapFactory.New(colorFrameDescription.Width, colorFrameDescription.Height);
+            //this.colorBitmap = BitmapFactory.New(1080, 1920);
 
             // we only need this if we're doing the compressed version
             //this.tempBitmap = BitmapFactory.New(colorFrameDescription.Width, colorFrameDescription.Height);
