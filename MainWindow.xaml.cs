@@ -27,8 +27,6 @@ namespace Redwood.Kinect.Slowmo
         private ColorFrameReader colorFrameReader = null;
         private WriteableBitmap colorBitmap = null;
         private string statusText = null;
-        private int _width = 1080;
-        private int _height = 1920;
 
         #region Dependency Properties
 
@@ -38,7 +36,7 @@ namespace Redwood.Kinect.Slowmo
         {
             get
             {
-                return this.colorBitmap;
+                return colorBitmap;
             }
         }
 
@@ -136,10 +134,6 @@ namespace Redwood.Kinect.Slowmo
             // open the reader for the color frames
             this.colorFrameReader = this.kinectSensor.ColorFrameSource.OpenReader();
 
-            // this does nothing?
-            //this.colorFrameReader.ColorFrameSource.CreateFrameDescription(ColorImageFormat.Yuy2);
-
-
             // open the reader for the body frames
             this.bodyFrameReader = this.kinectSensor.BodyFrameSource.OpenReader();
 
@@ -156,10 +150,7 @@ namespace Redwood.Kinect.Slowmo
             // create the bitmap to display
             //this.colorBitmap = new WriteableBitmap(colorFrameDescription.Width, colorFrameDescription.Height, 96.0, 96.0, PixelFormats.Bgr32, null);
             this.colorBitmap = BitmapFactory.New(colorFrameDescription.Width, colorFrameDescription.Height);
-            //this.colorBitmap = BitmapFactory.New(1080, 1920);
-
-            // we only need this if we're doing the compressed version
-            //this.tempBitmap = BitmapFactory.New(colorFrameDescription.Width, colorFrameDescription.Height);
+            //this.colorBitmap = BitmapFactory.New(_width, _height);
 
             // set IsAvailableChanged event notifier
             this.kinectSensor.IsAvailableChanged += this.Sensor_IsAvailableChanged;
@@ -247,8 +238,6 @@ namespace Redwood.Kinect.Slowmo
 
         /// Size for the RGB pixel in bitmap. I don't understand how this is calculated
         private readonly int _bytePerPixel = (PixelFormats.Bgr32.BitsPerPixel + 7) / 8;
-
-        bool skeletonActivate = false; // switch for activating slowmo on skeleton
 
         int consecutiveNoWrites = 0;
         public string ConsecutiveNoWrites
@@ -478,6 +467,7 @@ namespace Redwood.Kinect.Slowmo
             {
                 // Store the color frame data as a byte array
                 byte[] bytes = new byte[colorFrameDescription.Width * colorFrameDescription.Height * _bytePerPixel];
+                //byte[] bytes = new byte[_width * _height * _bytePerPixel];
 
                 // the incoming image data is in yuy2
                 colorFrame.CopyConvertedFrameDataToArray(bytes, ColorImageFormat.Bgra);

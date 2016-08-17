@@ -2,8 +2,8 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="SlowMo Mirror" 
-        Width="1024" Height="768"
-        Closing="MainWindow_Closing" WindowState="Maximized">
+        Width="1080" Height="1920"
+        Closing="MainWindow_Closing" WindowState="Maximized" WindowStyle="None">
     <Window.Resources>
         <Style TargetType="{x:Type Image}">
             <Setter Property="SnapsToDevicePixels" Value="True" />
@@ -17,12 +17,8 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-
-
-        <Viewbox Grid.Row="0" HorizontalAlignment="Center">
-            <Image Source="{Binding ImageSource}" Stretch="UniformToFill" />
-        </Viewbox>
-
+        <Image Source="{Binding ImageSource}" Stretch="UniformToFill" HorizontalAlignment="Center" />
+        
         <Ellipse Fill="{Binding EllipseFill}" Grid.Row="0" HorizontalAlignment="Right" Height="{Binding EllipseDiameter}" Width="{Binding EllipseDiameter}" Opacity="{Binding EllipseOpacity}"
                  Margin="10,30,30,10" Stroke="Transparent" VerticalAlignment="Top" />
 
@@ -37,7 +33,7 @@
         <!---->
         <StatusBar Grid.Row="2" HorizontalAlignment="Stretch" Name="statusBar" VerticalAlignment="Bottom" Background="White" Foreground="{StaticResource MediumGreyBrush}">
             
-            <Label>StoredFrames 1: </Label>
+            <Label>StoredFrames: </Label>
             <StatusBarItem Content="{Binding StoredFrames}" />
             
             <Label>Diff:</Label>
